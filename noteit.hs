@@ -13,9 +13,13 @@ import System.Directory (copyFile)
 import Data.Time.Clock
 import System.Locale
 import Data.Time.Format
+import Data.Map (Map)
+import qualified Data.Map as M
+import Data.Maybe
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
+type DB = Map Slug FilePath
 
 fromSlug ::  Slug -> Text
 fromSlug (Slug x) = x
@@ -58,7 +62,11 @@ addNote ::  IO ()
 addNote = do
   TI.putStr "Title: "
   title <- TI.getLine >>= maybeTitle
-  print title
+  return ()
+
+mkPlaceHolder :: Title -> Maybe Text
+mkPlaceHolder (Title t _) = Just $ T.unlines $ [t, T.replicate (T.length t) "=", ""]
+mkPlaceHolder _ = Nothing
 
 main ::  IO ()
 main = do
