@@ -15,12 +15,15 @@ import System.Locale
 import Data.Time.Format
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
+newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
 
 instance Arbitrary Text where
   arbitrary = fmap T.pack arbitrary
 
-newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
+
+fromSlug ::  Slug -> Text
 fromSlug (Slug x) = x
+
 slug :: Text -> Slug
 slug x = Slug . T.filter (isPrint) $ T.toLower $ T.map (\y -> if isSpace y then '_' else y) x
 
@@ -34,26 +37,35 @@ data NoteItArgs = NoteItArgs {
   , list :: Bool
   } deriving (Show, Data, Typeable)
 
+noteitargs ::  Mode (CmdArgs NoteItArgs)
 noteitargs = cmdArgsMode $ NoteItArgs {
     add = def
   , edit = def
   , list = def
   }
 
+time ::  IO Text
 time = fmap titletime getCurrentTime
+titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
 
-metafile = getUserDataFile "noteit" ".meta"
+metaFile ::  IO FilePath
+metaFile = getUserDataFile "noteit" ".meta"
+noteFile :: Slug -> IO FilePath
+noteFile = getUserDataFile "noteit" . T.unpack .  fromSlug -- Should also add .markdown
 
+maybeTitle ::  Text -> IO Title
 maybeTitle x
   | x == "" = Date `fmap` time
   | otherwise = return $ Title x $ slug x
 
+addNote ::  IO ()
 addNote = do
   TI.putStr "Title: "
   title <- TI.getLine >>= maybeTitle
   print title
 
+main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
