@@ -16,14 +16,14 @@ import System.Locale (defaultTimeLocale)
 import Data.Time.Format (formatTime)
 import Data.Set (Set)
 import qualified Data.Set as S
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import System.Directory (doesFileExist)
 import Control.Monad.Error
 import Control.Monad.State
 import Control.Applicative
 import Control.Exception (bracket)
 import System.Environment (getEnv)
-import System.Process (readProcessWithExitCode)
+import System.Process (system)
 
 newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 
@@ -60,10 +60,8 @@ runEditor :: Slug -> Note ()
 runEditor s = do
   e <- editor
   f <- noteFile s
-  (c,_,_) <- liftIO $ readProcessWithExitCode e [f] ""
-  case c of
-       ExitSuccess -> return ()
-       ExitFailure i -> throwError $ "Failed with exit code: " ++ show i
+  liftIO $ system $ e ++ " " ++ f
+  return ()
 
 titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
@@ -80,12 +78,19 @@ maybeTitle x
   | otherwise = return $ title x
 title x = Title x $ slug x
 
+slugFromTitle :: Title -> Slug
+slugFromTitle (Title _ s) = s
+slugFromTitle (Date d) = slug d
+
 addNote ::  Note ()
 addNote = do
-  liftIO $ TI.putStr "Title: "
+  liftIO $ TI.putStrLn "Title: "
   title <- (liftIO $ TI.getLine) >>= maybeTitle
+  let ph = mkPlaceHolder title
   modify (insNote title)
-  return ()
+  when (isJust ph) $
+    writePlaceholder (slugFromTitle title) (fromJust ph)
+  runEditor $ slugFromTitle title
 
 insNote :: Title -> DB -> DB
 insNote (Title _ s) db = S.insert s db
