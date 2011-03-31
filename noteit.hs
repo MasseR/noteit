@@ -8,7 +8,7 @@ import Data.Char (isPrint, isSpace, isUpper, isPrint)
 import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, cmdArgsRun)
 import Test.QuickCheck (Arbitrary, arbitrary, property)
 import System.Environment.XDG.BaseDir (getUserDataFile, getUserDataDir)
-import System.IO (openTempFile)
+import System.IO (hClose, openTempFile)
 import System.Directory (copyFile, createDirectoryIfMissing)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import System.Locale (defaultTimeLocale)
@@ -20,6 +20,7 @@ import System.Directory (doesFileExist)
 import Control.Monad.Error
 import Control.Monad.State
 import Control.Applicative
+import Control.Exception (bracket)
 
 newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 
@@ -86,7 +87,10 @@ readMeta = do
 writeMeta :: DB -> IO ()
 writeMeta db = do
   f <- metaFile
-  TI.writeFile f $ T.pack $ show db
+  bracket
+    (openTempFile "/tmp" "meta")
+    (\(p,h) -> hClose h >> copyFile p f)
+    (\(_,h) -> TI.hPutStr h (T.pack $ show db))
 
 readM :: ((MonadError String) m, Read a) => String -> m a
 readM x = case reads x of
@@ -117,7 +121,7 @@ main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
-       (NoteItArgs True _ _) -> undefined
+       (NoteItArgs True _ _) -> runNote addNote
 
 --tests
 
