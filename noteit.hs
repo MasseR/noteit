@@ -6,7 +6,7 @@ import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as TI
 import Data.Char (isPrint, isSpace, isUpper, isPrint)
-import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, cmdArgsRun)
+import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, cmdArgsRun, (&=), program)
 import Test.QuickCheck (Arbitrary, arbitrary, property)
 import System.Environment.XDG.BaseDir (getUserDataFile, getUserDataDir)
 import System.IO (hClose, openTempFile)
@@ -44,11 +44,11 @@ data NoteItArgs = NoteItArgs {
   } deriving (Show, Data, Typeable)
 
 noteitargs ::  Mode (CmdArgs NoteItArgs)
-noteitargs = cmdArgsMode NoteItArgs {
+noteitargs = cmdArgsMode $ NoteItArgs {
     add = def
   , edit = def
   , list = def
-  }
+  } &= program "NoteIt"
 
 time ::  Note Text
 time = fmap titletime $ liftIO getCurrentTime
