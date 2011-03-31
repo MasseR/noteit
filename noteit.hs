@@ -145,11 +145,19 @@ runNote (Note x) = do
              Right _ -> writeMeta db'
         return ()
 
+listings :: Note Text
+listings = fmap (fmtlistings . S.toList) (get)
+  where fmtlistings x = T.unlines $
+          zipWith (\i y -> (T.pack $ show i) `T.append` ". " `T.append` fromSlug y) [1..] x
+
+listNotes = listings >>= liftIO . TI.putStrLn
+
 main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
        (NoteItArgs True _ _) -> runNote addNote
+       (NoteItArgs _ _ True) -> runNote listNotes
 
 --tests
 
