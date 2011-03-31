@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, OverloadedStrings, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Main where
 
+import System.Exit (ExitCode(..))
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as TI
@@ -21,6 +22,8 @@ import Control.Monad.Error
 import Control.Monad.State
 import Control.Applicative
 import Control.Exception (bracket)
+import System.Environment (getEnv)
+import System.Process (readProcessWithExitCode)
 
 newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 
@@ -50,13 +53,25 @@ noteitargs = cmdArgsMode $ NoteItArgs {
 time ::  Note Text
 time = fmap titletime $ liftIO getCurrentTime
 
+editor :: Note String
+editor = liftIO $ getEnv "EDITOR"
+
+runEditor :: Slug -> Note ()
+runEditor s = do
+  e <- editor
+  f <- noteFile s
+  (c,_,_) <- liftIO $ readProcessWithExitCode e [f] ""
+  case c of
+       ExitSuccess -> return ()
+       ExitFailure i -> throwError $ "Failed with exit code: " ++ show i
+
 titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
 
 metaFile :: MonadIO m => m FilePath
 metaFile = liftIO $ getUserDataFile "noteit" ".meta"
 
-noteFile :: Slug -> IO FilePath
+noteFile :: Slug -> Note FilePath
 noteFile = liftIO . fmap (++ ".markdown") . getUserDataFile "noteit" . T.unpack .  fromSlug
 
 maybeTitle ::  Text -> Note Title
@@ -83,6 +98,14 @@ readMeta = do
   if not e
      then return S.empty
      else liftIO (readFile m) >>= readM
+
+writePlaceholder :: Slug -> Text -> Note ()
+writePlaceholder s t = do
+  f <- noteFile s
+  liftIO $ bracket
+    (openTempFile "/tmp" "note")
+    (\(p,h) -> hClose h >> copyFile p f)
+    (\(_,h) -> TI.hPutStr h t)
 
 writeMeta :: DB -> IO ()
 writeMeta db = do
