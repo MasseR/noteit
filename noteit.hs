@@ -4,18 +4,23 @@ module Main where
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as TI
-import Data.Char
-import System.Console.CmdArgs
-import Test.QuickCheck
-import System.Environment.XDG.BaseDir
+import Data.Char (isPrint, isSpace, isUpper, isPrint)
+import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, cmdArgsRun)
+import Test.QuickCheck (Arbitrary, arbitrary, property)
+import System.Environment.XDG.BaseDir (getUserDataFile, getUserDataDir)
 import System.IO (openTempFile)
-import System.Directory (copyFile)
-import Data.Time.Clock
-import System.Locale
-import Data.Time.Format
+import System.Directory (copyFile, createDirectoryIfMissing)
+import Data.Time.Clock (getCurrentTime, UTCTime)
+import System.Locale (defaultTimeLocale)
+import Data.Time.Format (formatTime)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe
+import Data.Maybe (fromJust)
+import System.Directory (doesFileExist)
+import Control.Monad.Error
+import Control.Applicative
+
+newtype Note a = Note (ErrorT String IO a) deriving (Monad, MonadError String, MonadIO, Functor, Applicative, Alternative)
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
@@ -40,39 +45,64 @@ noteitargs = cmdArgsMode $ NoteItArgs {
   , list = def
   }
 
-time ::  IO Text
-time = fmap titletime getCurrentTime
+time ::  Note Text
+time = fmap titletime $ liftIO getCurrentTime
 
 titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
 
-metaFile ::  IO FilePath
-metaFile = getUserDataFile "noteit" ".meta"
+metaFile ::  Note FilePath
+metaFile = liftIO $ getUserDataFile "noteit" ".meta"
 
 noteFile :: Slug -> IO FilePath
-noteFile = fmap (++ ".markdown") . getUserDataFile "noteit" . T.unpack .  fromSlug
+noteFile = liftIO . fmap (++ ".markdown") . getUserDataFile "noteit" . T.unpack .  fromSlug
 
-maybeTitle ::  Text -> IO Title
+maybeTitle ::  Text -> Note Title
 maybeTitle x
   | x == "" = Date `fmap` time
   | otherwise = return $ title x
 title x = Title x $ slug x
 
-addNote ::  IO ()
+addNote ::  Note ()
 addNote = do
-  TI.putStr "Title: "
-  title <- TI.getLine >>= maybeTitle
+  liftIO $ TI.putStr "Title: "
+  title <- (liftIO $ TI.getLine) >>= maybeTitle
   return ()
+
+readMeta :: Note DB
+readMeta = do
+  f <- metaFile
+  e <- liftIO $ doesFileExist f
+  if not e
+     then return $ M.empty
+     else do
+       readM=<< (liftIO $ readFile f)
+
+readM :: (Read a) => String -> Note a
+readM x = case reads x of
+               [] -> throwError $ "Could not parse: " ++ x
+               [(a,_)] -> return a
 
 mkPlaceHolder :: Title -> Maybe Text
 mkPlaceHolder (Title t _) = Just $ T.unlines $ [t, T.replicate (T.length t) "=", ""]
 mkPlaceHolder _ = Nothing
 
+noteDir = getUserDataDir "noteit"
+
+runNote :: Note () -> IO ()
+runNote (Note f) = do
+  dir <- noteDir
+  createDirectoryIfMissing True dir
+  r <- runErrorT f
+  case r of
+       (Left e)-> TI.putStrLn $ "Error: " `T.append` T.pack e
+       _ -> return ()
+
 main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
-       (NoteItArgs True _ _) -> addNote
+       (NoteItArgs True _ _) -> runNote $ addNote
 
 --tests
 
