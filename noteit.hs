@@ -13,8 +13,8 @@ import System.Directory (copyFile, createDirectoryIfMissing)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import System.Locale (defaultTimeLocale)
 import Data.Time.Format (formatTime)
-import Data.Map (Map)
-import qualified Data.Map as M
+import Data.Set (Set)
+import qualified Data.Set as S
 import Data.Maybe (fromJust)
 import System.Directory (doesFileExist)
 import Control.Monad.Error
@@ -25,7 +25,7 @@ newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadErr
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
-type DB = Map Slug FilePath
+type DB = Set Slug
 
 fromSlug ::  Slug -> Text
 fromSlug (Slug x) = x
@@ -70,12 +70,13 @@ addNote = do
   title <- (liftIO $ TI.getLine) >>= maybeTitle
   return ()
 
+
 readMeta :: (MonadError String m, MonadIO m) => m DB
 readMeta = do
   m <- metaFile
   e <- liftIO $ doesFileExist m
   if not e
-     then return M.empty
+     then return S.empty
      else liftIO (readFile m) >>= readM
 
 writeMeta :: DB -> IO ()
