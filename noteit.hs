@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings, DeriveDataTypeable, GeneralizedNewtypeDeriving #-}
 module Main where
 
 import Data.Text.Lazy (Text)
@@ -18,9 +18,10 @@ import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import System.Directory (doesFileExist)
 import Control.Monad.Error
+import Control.Monad.State
 import Control.Applicative
 
-newtype Note a = Note (ErrorT String IO a) deriving (Monad, MonadError String, MonadIO, Functor, Applicative, Alternative)
+newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
@@ -51,7 +52,7 @@ time = fmap titletime $ liftIO getCurrentTime
 titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
 
-metaFile ::  Note FilePath
+metaFile :: MonadIO m => m FilePath
 metaFile = liftIO $ getUserDataFile "noteit" ".meta"
 
 noteFile :: Slug -> IO FilePath
@@ -69,16 +70,20 @@ addNote = do
   title <- (liftIO $ TI.getLine) >>= maybeTitle
   return ()
 
-readMeta :: Note DB
+readMeta :: (MonadError String m, MonadIO m) => m DB
 readMeta = do
-  f <- metaFile
-  e <- liftIO $ doesFileExist f
+  m <- metaFile
+  e <- liftIO $ doesFileExist m
   if not e
-     then return $ M.empty
-     else do
-       readM=<< (liftIO $ readFile f)
+     then return M.empty
+     else liftIO (readFile m) >>= readM
 
-readM :: (Read a) => String -> Note a
+writeMeta :: DB -> IO ()
+writeMeta db = do
+  f <- metaFile
+  TI.writeFile f $ T.pack $ show db
+
+readM :: ((MonadError String) m, Read a) => String -> m a
 readM x = case reads x of
                [] -> throwError $ "Could not parse: " ++ x
                [(a,_)] -> return a
@@ -90,19 +95,24 @@ mkPlaceHolder _ = Nothing
 noteDir = getUserDataDir "noteit"
 
 runNote :: Note () -> IO ()
-runNote (Note f) = do
+runNote (Note x) = do
   dir <- noteDir
   createDirectoryIfMissing True dir
-  r <- runErrorT f
-  case r of
-       (Left e)-> TI.putStrLn $ "Error: " `T.append` T.pack e
-       _ -> return ()
+  edb <- runErrorT $ readMeta
+  case edb of
+       Left e -> TI.putStrLn $ "Could not read metafile: " `T.append` (T.pack e)
+       Right db -> do
+        (r, db') <- runStateT (runErrorT x) db
+        case r of
+             Left e' -> TI.putStrLn $ "Error: " `T.append` (T.pack e')
+             Right _ -> writeMeta db'
+        return ()
 
 main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
-       (NoteItArgs True _ _) -> runNote $ addNote
+       (NoteItArgs True _ _) -> undefined
 
 --tests
 
