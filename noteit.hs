@@ -17,19 +17,11 @@ import Data.Time.Format
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
 
-instance Arbitrary Text where
-  arbitrary = fmap T.pack arbitrary
-
-
 fromSlug ::  Slug -> Text
 fromSlug (Slug x) = x
 
 slug :: Text -> Slug
 slug x = Slug . T.filter (isPrint) $ T.toLower $ T.map (\y -> if isSpace y then '_' else y) x
-
-prop_slug_no_spaces x = property $ T.length (T.dropWhile (not . isSpace) $ fromSlug $ slug x) == 0
-prop_slug_all_lower x = property $ T.length (T.filter (isUpper) $ fromSlug $ slug x) == 0
-prop_slug_all_printable x = property $ T.length (T.filter (not . isPrint) (fromSlug $ slug x)) == 0
 
 data NoteItArgs = NoteItArgs {
     add :: Bool
@@ -71,3 +63,12 @@ main = do
   a <- cmdArgsRun noteitargs
   case a of
        (NoteItArgs True _ _) -> addNote
+
+--tests
+
+instance Arbitrary Text where
+  arbitrary = fmap T.pack arbitrary
+
+prop_slug_no_spaces x = property $ T.length (T.dropWhile (not . isSpace) $ fromSlug $ slug x) == 0
+prop_slug_all_lower x = property $ T.length (T.filter (isUpper) $ fromSlug $ slug x) == 0
+prop_slug_all_printable x = property $ T.length (T.filter (not . isPrint) (fromSlug $ slug x)) == 0
