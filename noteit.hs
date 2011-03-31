@@ -57,7 +57,8 @@ noteFile = getUserDataFile "noteit" . T.unpack .  fromSlug -- Should also add .m
 maybeTitle ::  Text -> IO Title
 maybeTitle x
   | x == "" = Date `fmap` time
-  | otherwise = return $ Title x $ slug x
+  | otherwise = return $ title x
+title x = Title x $ slug x
 
 addNote ::  IO ()
 addNote = do
