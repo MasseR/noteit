@@ -151,6 +151,9 @@ listings = fmap (fmtlistings . S.toList) (get)
           zipWith (\i y -> (T.pack $ show i) `T.append` ". " `T.append` fromSlug y) [1..] x
 
 listNotes = listings >>= liftIO . TI.putStrLn
+editNote i = do
+  s <- fmap ((!! (i-1)) . S.toList) get
+  runEditor s
 
 main ::  IO ()
 main = do
@@ -158,6 +161,7 @@ main = do
   case a of
        (NoteItArgs True _ _) -> runNote addNote
        (NoteItArgs _ _ True) -> runNote listNotes
+       (NoteItArgs _ i _) -> runNote $ editNote i
 
 --tests
 
