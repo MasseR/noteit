@@ -38,13 +38,15 @@ noteitargs = cmdArgsMode $ NoteItArgs {
 
 time ::  IO Text
 time = fmap titletime getCurrentTime
+
 titletime ::  UTCTime -> Text
 titletime = T.pack . formatTime defaultTimeLocale "%Y-%m-%d-%H-%M-%S"
 
 metaFile ::  IO FilePath
 metaFile = getUserDataFile "noteit" ".meta"
+
 noteFile :: Slug -> IO FilePath
-noteFile = getUserDataFile "noteit" . T.unpack .  fromSlug -- Should also add .markdown
+noteFile = fmap (++ ".markdown") . getUserDataFile "noteit" . T.unpack .  fromSlug
 
 maybeTitle ::  Text -> IO Title
 maybeTitle x
