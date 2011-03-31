@@ -10,14 +10,13 @@ import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, 
 import Test.QuickCheck (Arbitrary, arbitrary, property)
 import System.Environment.XDG.BaseDir (getUserDataFile, getUserDataDir)
 import System.IO (hClose, openTempFile)
-import System.Directory (copyFile, createDirectoryIfMissing)
+import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist)
 import Data.Time.Clock (getCurrentTime, UTCTime)
 import System.Locale (defaultTimeLocale)
 import Data.Time.Format (formatTime)
 import Data.Set (Set)
 import qualified Data.Set as S
 import Data.Maybe (fromJust, isJust)
-import System.Directory (doesFileExist)
 import Control.Monad.Error
 import Control.Monad.State
 import Control.Applicative
@@ -25,7 +24,8 @@ import Control.Exception (bracket)
 import System.Environment (getEnv)
 import System.Process (system)
 
-newtype Note a = Note (ErrorT String (StateT DB IO) a) deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
+newtype Note a = Note (ErrorT String (StateT DB IO) a)
+  deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
@@ -44,7 +44,7 @@ data NoteItArgs = NoteItArgs {
   } deriving (Show, Data, Typeable)
 
 noteitargs ::  Mode (CmdArgs NoteItArgs)
-noteitargs = cmdArgsMode $ NoteItArgs {
+noteitargs = cmdArgsMode NoteItArgs {
     add = def
   , edit = def
   , list = def
@@ -85,7 +85,7 @@ slugFromTitle (Date d) = slug d
 addNote ::  Note ()
 addNote = do
   liftIO $ TI.putStrLn "Title: "
-  title <- (liftIO $ TI.getLine) >>= maybeTitle
+  title <- liftIO TI.getLine >>= maybeTitle
   let ph = mkPlaceHolder title
   modify (insNote title)
   when (isJust ph) $
@@ -126,7 +126,7 @@ readM x = case reads x of
                [(a,_)] -> return a
 
 mkPlaceHolder :: Title -> Maybe Text
-mkPlaceHolder (Title t _) = Just $ T.unlines $ [t, T.replicate (T.length t) "=", ""]
+mkPlaceHolder (Title t _) = Just $ T.unlines [t, T.replicate (T.length t) "=", ""]
 mkPlaceHolder _ = Nothing
 
 noteDir = getUserDataDir "noteit"
@@ -135,13 +135,13 @@ runNote :: Note () -> IO ()
 runNote (Note x) = do
   dir <- noteDir
   createDirectoryIfMissing True dir
-  edb <- runErrorT $ readMeta
+  edb <- runErrorT readMeta
   case edb of
-       Left e -> TI.putStrLn $ "Could not read metafile: " `T.append` (T.pack e)
+       Left e -> TI.putStrLn $ "Could not read metafile: " `T.append` T.pack e
        Right db -> do
         (r, db') <- runStateT (runErrorT x) db
         case r of
-             Left e' -> TI.putStrLn $ "Error: " `T.append` (T.pack e')
+             Left e' -> TI.putStrLn $ "Error: " `T.append` T.pack e'
              Right _ -> writeMeta db'
         return ()
 
@@ -157,5 +157,5 @@ instance Arbitrary Text where
   arbitrary = fmap T.pack arbitrary
 
 prop_slug_no_spaces x = property $ T.length (T.dropWhile (not . isSpace) $ fromSlug $ slug x) == 0
-prop_slug_all_lower x = property $ T.length (T.filter (isUpper) $ fromSlug $ slug x) == 0
+prop_slug_all_lower x = property $ T.length (T.filter isUpper $ fromSlug $ slug x) == 0
 prop_slug_all_printable x = property $ T.length (T.filter (not . isPrint) (fromSlug $ slug x)) == 0
