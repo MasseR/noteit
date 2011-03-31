@@ -68,8 +68,12 @@ addNote ::  Note ()
 addNote = do
   liftIO $ TI.putStr "Title: "
   title <- (liftIO $ TI.getLine) >>= maybeTitle
+  modify (insNote title)
   return ()
 
+insNote :: Title -> DB -> DB
+insNote (Title _ s) db = S.insert s db
+insNote (Date d) db = S.insert (slug d) db
 
 readMeta :: (MonadError String m, MonadIO m) => m DB
 readMeta = do
