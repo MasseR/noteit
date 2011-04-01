@@ -160,7 +160,7 @@ listings = fmap (fmtlistings . S.toList) (get)
           zipWith (\i y -> (T.pack $ show i) `T.append` ". " `T.append` fromSlug y) [1..] x
 
 listNotes ::  Note ()
-listNotes = listings >>= liftIO . TI.putStrLn
+listNotes = listings >>= liftIO . TI.putStr
 
 selectionToSlug :: Selection -> DB -> Slug
 selectionToSlug i = (!! (fromSelection i)) . S.toList
