@@ -44,8 +44,9 @@ slug x = Slug . T.filter (isPrint) $ T.toLower $ T.map (\y -> if isSpace y then 
 
 data NoteItArgs = NoteItArgs {
     add :: Bool
-  , edit :: Int
+  , edit :: Maybe Int
   , list :: Bool
+  , remove :: Maybe Int
   } deriving (Show, Data, Typeable)
 
 noteitargs ::  Mode (CmdArgs NoteItArgs)
@@ -53,6 +54,7 @@ noteitargs = cmdArgsMode $ NoteItArgs {
     add = def
   , edit = def
   , list = def
+  , remove = def
   } &= program "NoteIt"
 
 time ::  Note Text
@@ -167,14 +169,17 @@ editNote ::  Selection -> Note ()
 editNote i = do
   s <- fmap (selectionToSlug i) get
   runEditor s
+removeNote :: Selection -> Note ()
+removeNote i = modify (rmNote i)
 
 main ::  IO ()
 main = do
   a <- cmdArgsRun noteitargs
   case a of
-       (NoteItArgs True _ _) -> runNote addNote
-       (NoteItArgs _ _ True) -> runNote listNotes
-       (NoteItArgs _ i _) -> runNote $ editNote $ selection i
+       (NoteItArgs True _ _ _) -> runNote addNote
+       (NoteItArgs _ _ True _) -> runNote listNotes
+       (NoteItArgs _ _ _ (Just i)) -> runNote $ removeNote $ selection i
+       (NoteItArgs _ (Just i) _ _) -> runNote $ editNote $ selection i
 
 --tests
 
