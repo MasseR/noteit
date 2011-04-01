@@ -170,7 +170,7 @@ editNote i = do
   s <- fmap (selectionToSlug i) get
   runEditor s
 removeNote :: Selection -> Note ()
-removeNote i = modify (rmNote i)
+removeNote i = modify (rmNote i) -- Only removes from metafile, not from disk
 
 main ::  IO ()
 main = do
