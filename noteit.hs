@@ -26,6 +26,11 @@ import System.Process (system)
 
 newtype Note a = Note (ErrorT String (StateT DB IO) a)
   deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
+newtype Selection = Selection Int deriving (Read, Show, Eq, Ord, Num, Real, Enum, Integral)
+fromSelection ::  Selection -> Int
+fromSelection (Selection i) = i - 1
+selection ::  Int -> Selection
+selection = Selection
 
 data Title = Title Text Slug | Date Text deriving (Show, Read)
 newtype Slug = Slug Text deriving (Read, Show, Eq, Ord)
@@ -150,9 +155,15 @@ listings = fmap (fmtlistings . S.toList) (get)
   where fmtlistings x = T.unlines $
           zipWith (\i y -> (T.pack $ show i) `T.append` ". " `T.append` fromSlug y) [1..] x
 
+listNotes ::  Note ()
 listNotes = listings >>= liftIO . TI.putStrLn
+
+selectionToSlug :: Selection -> DB -> Slug
+selectionToSlug i = (!! (fromSelection i)) . S.toList
+
+editNote ::  Selection -> Note ()
 editNote i = do
-  s <- fmap ((!! (i-1)) . S.toList) get
+  s <- fmap (selectionToSlug i) get
   runEditor s
 
 main ::  IO ()
@@ -161,7 +172,7 @@ main = do
   case a of
        (NoteItArgs True _ _) -> runNote addNote
        (NoteItArgs _ _ True) -> runNote listNotes
-       (NoteItArgs _ i _) -> runNote $ editNote i
+       (NoteItArgs _ i _) -> runNote $ editNote $ selection i
 
 --tests
 
