@@ -100,6 +100,8 @@ addNote = do
 insNote :: Title -> DB -> DB
 insNote (Title _ s) db = S.insert s db
 insNote (Date d) db = S.insert (slug d) db
+rmNote :: Selection -> DB -> DB
+rmNote i db = S.delete (selectionToSlug i db) db -- horribly inefficient :P
 
 readMeta :: (MonadError String m, MonadIO m) => m DB
 readMeta = do
