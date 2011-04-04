@@ -3,11 +3,10 @@ module Main where
 
 import System.Exit (ExitCode(..))
 import Data.Text.Lazy (Text)
-import qualified Data.Text.Lazy as T
-import qualified Data.Text.Lazy.IO as TI
+import qualified Data.Text.Lazy as T (filter, toLower, map, pack, unpack, unlines, replicate, length, append, concat)
+import qualified Data.Text.Lazy.IO as TI (putStr, putStrLn, getLine, hPutStr)
 import Data.Char (isPrint, isSpace, isUpper, isPrint)
 import System.Console.CmdArgs (Data, Typeable, Mode, CmdArgs, cmdArgsMode, def, cmdArgsRun, (&=), program)
-import Test.QuickCheck (Arbitrary, arbitrary, property)
 import System.Environment.XDG.BaseDir (getUserDataFile, getUserDataDir)
 import System.IO (hClose, openTempFile)
 import System.Directory (copyFile, createDirectoryIfMissing, doesFileExist)
@@ -15,17 +14,17 @@ import Data.Time.Clock (getCurrentTime, UTCTime)
 import System.Locale (defaultTimeLocale)
 import Data.Time.Format (formatTime)
 import Data.Set (Set)
-import qualified Data.Set as S
+import qualified Data.Set as S (size, insert, delete, empty, toList)
 import Data.Maybe (fromJust, isJust)
-import Control.Monad.Error
-import Control.Monad.State
-import Control.Applicative
+import Control.Monad.Error (ErrorT(..), MonadError(..), throwError, runErrorT)
+import Control.Monad.State (StateT(..), MonadState(..), get, MonadIO(..), modify, when)
 import Control.Exception (bracket)
 import System.Environment (getEnv)
 import System.Process (system)
+import Control.Monad.Trans (liftIO)
 
 newtype Note a = Note (ErrorT String (StateT DB IO) a)
-  deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
+  deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor)
 newtype Selection = Selection Int deriving (Read, Show, Eq, Ord, Num, Real, Enum, Integral)
 
 fromSelection ::  Selection -> Int
@@ -52,7 +51,7 @@ fromSlug ::  Slug -> Text
 fromSlug (Slug x) = x
 
 slug :: Text -> Slug
-slug x = Slug . T.filter (isPrint) $ T.toLower $ T.map (\y -> if isSpace y then '_' else y) x
+slug x = Slug . T.filter isPrint $ T.toLower $ T.map (\y -> if isSpace y then '_' else y) x
 
 data NoteItArgs = NoteItArgs {
     add :: Bool
@@ -95,6 +94,8 @@ maybeTitle ::  Text -> Note Title
 maybeTitle x
   | x == "" = Date `fmap` time
   | otherwise = return $ title x
+
+title ::  Text -> Title
 title x = Title x $ slug x
 
 slugFromTitle :: Title -> Slug
@@ -114,6 +115,7 @@ addNote = do
 insNote :: Title -> DB -> DB
 insNote (Title _ s) db = S.insert s db
 insNote (Date d) db = S.insert (slug d) db
+
 rmNote :: Int -> DB -> DB
 rmNote i db = S.delete (selectionToSlug i db) db -- horribly inefficient :P
 
@@ -167,9 +169,9 @@ runNote (Note x) = do
         return ()
 
 listings :: Note Text
-listings = fmap (fmtlistings . S.toList) (get)
-  where fmtlistings x = T.unlines $
-          zipWith (\i y -> (T.pack $ show i) `T.append` ". " `T.append` fromSlug y) [1..] x
+listings = fmap fmtlistings get
+  where fmtlistings = T.unlines .
+          zipWith (\i y -> T.concat [T.pack $ show i, ". ", fromSlug y]) [1..] . S.toList
 
 listNotes ::  Note ()
 listNotes = listings >>= liftIO . TI.putStr
@@ -183,7 +185,7 @@ editNote s = do
   slug <- fmap (selectionToSlug i) get
   runEditor slug
 removeNote :: Selection -> Note ()
-removeNote s = selectBounds s >>= \i -> modify (rmNote i) -- Only removes from metafile, not from disk
+removeNote s = selectBounds s >>= modify . rmNote -- Only removes from metafile, not from disk
 
 main ::  IO ()
 main = do
@@ -193,12 +195,3 @@ main = do
        (NoteItArgs _ _ True _) -> runNote listNotes
        (NoteItArgs _ _ _ (Just i)) -> runNote $ removeNote $ selection i
        (NoteItArgs _ (Just i) _ _) -> runNote $ editNote $ selection i
-
---tests
-
-instance Arbitrary Text where
-  arbitrary = fmap T.pack arbitrary
-
-prop_slug_no_spaces x = property $ T.length (T.dropWhile (not . isSpace) $ fromSlug $ slug x) == 0
-prop_slug_all_lower x = property $ T.length (T.filter isUpper $ fromSlug $ slug x) == 0
-prop_slug_all_printable x = property $ T.length (T.filter (not . isPrint) (fromSlug $ slug x)) == 0
