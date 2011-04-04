@@ -27,8 +27,20 @@ import System.Process (system)
 newtype Note a = Note (ErrorT String (StateT DB IO) a)
   deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor, Applicative, Alternative)
 newtype Selection = Selection Int deriving (Read, Show, Eq, Ord, Num, Real, Enum, Integral)
+
 fromSelection ::  Selection -> Int
 fromSelection (Selection i) = i - 1
+
+selectBounds :: Selection -> Note Int
+selectBounds s = do
+  db <- get
+  let lowerbound = 0
+      upperbound = S.size db
+      i = fromSelection s
+  if not (i >= lowerbound && i < upperbound)
+     then throwError "Selection out of bounds"
+     else return i
+
 selection ::  Int -> Selection
 selection = Selection
 
@@ -102,7 +114,7 @@ addNote = do
 insNote :: Title -> DB -> DB
 insNote (Title _ s) db = S.insert s db
 insNote (Date d) db = S.insert (slug d) db
-rmNote :: Selection -> DB -> DB
+rmNote :: Int -> DB -> DB
 rmNote i db = S.delete (selectionToSlug i db) db -- horribly inefficient :P
 
 readMeta :: (MonadError String m, MonadIO m) => m DB
@@ -162,15 +174,16 @@ listings = fmap (fmtlistings . S.toList) (get)
 listNotes ::  Note ()
 listNotes = listings >>= liftIO . TI.putStr
 
-selectionToSlug :: Selection -> DB -> Slug
-selectionToSlug i = (!! (fromSelection i)) . S.toList
+selectionToSlug :: Int -> DB -> Slug
+selectionToSlug i = (!! i) . S.toList
 
 editNote ::  Selection -> Note ()
-editNote i = do
-  s <- fmap (selectionToSlug i) get
-  runEditor s
+editNote s = do
+  i <- selectBounds s
+  slug <- fmap (selectionToSlug i) get
+  runEditor slug
 removeNote :: Selection -> Note ()
-removeNote i = modify (rmNote i) -- Only removes from metafile, not from disk
+removeNote s = selectBounds s >>= \i -> modify (rmNote i) -- Only removes from metafile, not from disk
 
 main ::  IO ()
 main = do
