@@ -18,13 +18,17 @@ import qualified Data.Set as S (size, insert, delete, empty, toList)
 import Data.Maybe (fromJust, isJust)
 import Control.Monad.Error (ErrorT(..), MonadError(..), throwError, runErrorT)
 import Control.Monad.State (StateT(..), MonadState(..), get, MonadIO(..), modify, when)
+import Control.Monad.Reader
 import Control.Exception (bracket)
-import System.Environment (getEnv)
 import System.Process (system)
 import Control.Monad.Trans (liftIO)
 
-newtype Note a = Note (ErrorT String (StateT DB IO) a)
-  deriving (Monad, MonadError String, MonadState DB, MonadIO, Functor)
+data NConf = NConf {
+  conf_editor :: String
+  } deriving Show
+newtype Note a = Note (ErrorT String (StateT DB (ReaderT NConf IO)) a)
+  deriving (Monad, MonadError String, MonadState DB, MonadReader NConf, MonadIO, Functor)
+
 newtype Selection = Selection Int deriving (Read, Show, Eq, Ord, Num, Real, Enum, Integral)
 
 fromSelection ::  Selection -> Int
@@ -71,8 +75,8 @@ noteitargs = cmdArgsMode $ NoteItArgs {
 time ::  Note Text
 time = fmap titletime $ liftIO getCurrentTime
 
-editor :: Note String
-editor = liftIO $ getEnv "EDITOR"
+editor :: MonadReader NConf m => m String
+editor = asks conf_editor
 
 runEditor :: Slug -> Note ()
 runEditor s = do
@@ -154,15 +158,15 @@ mkPlaceHolder _ = Nothing
 
 noteDir = getUserDataDir "noteit"
 
-runNote :: Note () -> IO ()
-runNote (Note x) = do
+runNote :: NConf -> Note () -> IO ()
+runNote c (Note x) = do
   dir <- noteDir
   createDirectoryIfMissing True dir
   edb <- runErrorT readMeta
   case edb of
        Left e -> TI.putStrLn $ "Could not read metafile: " `T.append` T.pack e
        Right db -> do
-        (r, db') <- runStateT (runErrorT x) db
+        (r, db') <- runReaderT (runStateT (runErrorT x) db) c
         case r of
              Left e' -> TI.putStrLn $ "Error: " `T.append` T.pack e'
              Right _ -> writeMeta db'
@@ -187,11 +191,13 @@ editNote s = do
 removeNote :: Selection -> Note ()
 removeNote s = selectBounds s >>= modify . rmNote -- Only removes from metafile, not from disk
 
-main ::  IO ()
-main = do
+defaultMain :: NConf -> IO ()
+defaultMain c = do
   a <- cmdArgsRun noteitargs
   case a of
-       (NoteItArgs True _ _ _) -> runNote addNote
-       (NoteItArgs _ _ True _) -> runNote listNotes
-       (NoteItArgs _ _ _ (Just i)) -> runNote $ removeNote $ selection i
-       (NoteItArgs _ (Just i) _ _) -> runNote $ editNote $ selection i
+       (NoteItArgs True _ _ _) -> runNote c addNote
+       (NoteItArgs _ _ True _) -> runNote c listNotes
+       (NoteItArgs _ _ _ (Just i)) -> runNote c $ removeNote $ selection i
+       (NoteItArgs _ (Just i) _ _) -> runNote c $ editNote $ selection i
+
+main = defaultMain $ NConf {conf_editor = "vim"}
